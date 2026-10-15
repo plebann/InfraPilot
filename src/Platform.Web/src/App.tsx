@@ -20,6 +20,7 @@ import { ActivityTemplateSettings } from '@/app/settings/ActivityTemplateSetting
 import { FeatureFlagSettings } from '@/app/settings/FeatureFlagSettings';
 import { CatalogSettings } from '@/app/settings/CatalogSettings';
 import { PromotionSettings } from '@/app/settings/PromotionSettings';
+import { FreezeSettingsPrototype } from '@/app/settings/prototype/FreezeSettingsPrototype';
 import { RollbackSettings } from '@/app/settings/RollbackSettings';
 import { DeploymentMaintenanceSettings } from '@/app/settings/DeploymentMaintenanceSettings';
 import { ReleaseNoteTemplateSettings } from '@/app/settings/ReleaseNoteTemplateSettings';
@@ -68,6 +69,8 @@ function App() {
             <Route path="feature-flags" element={<FeatureFlagSettings />} />
             <Route path="catalog" element={<CatalogSettings />} />
             <Route path="promotions" element={<PromotionSettings />} />
+            {/* PROTOTYPE — throwaway route, remove before merge */}
+            <Route path="freeze-prototype" element={<FreezeSettingsPrototype />} />
             <Route path="rollbacks" element={<RollbackSettings />} />
             <Route path="deployment-maintenance" element={<DeploymentMaintenanceSettings />} />
             <Route path="release-notes-template" element={<ReleaseNoteTemplateSettings />} />
