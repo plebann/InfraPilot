@@ -14,7 +14,27 @@ import {
   GitPullRequest,
   Ticket,
   ExternalLink,
+  Snowflake,
 } from 'lucide-react';
+// PROTOTYPE — throwaway imports, remove before merge
+import { useSearchParams } from 'react-router-dom';
+import { PrototypeSwitcher } from '@/components/prototype/PrototypeSwitcher';
+import {
+  PROTO_CANDIDATES,
+  PROTO_FREEZES,
+  FREEZE_VARIANTS,
+  applyStubFilters,
+  findFreeze,
+  FrozenBadge,
+  FrozenRibbon,
+  FreezeBanner,
+  FrozenGroup,
+  groupsFrozen,
+  showsRibbon,
+  showsBanner,
+  type ActiveFreezeStub,
+  type FreezeVariant,
+} from './prototype/freezeCuesPrototype';
 
 /**
  * Per-candidate work-item signoff progress for the list. Computed lazily for the
@@ -64,6 +84,10 @@ export function PromotionsPage() {
   const [resolved, setResolved] = useState<PromotionCandidate[]>([]);
   const [resolvedShown, setResolvedShown] = useState(false);
   const [resolvedLoading, setResolvedLoading] = useState(false);
+  // PROTOTYPE — freeze cue variant from ?variant= and stub freezes
+  const [searchParams] = useSearchParams();
+  const freezeVariant = (searchParams.get('variant') ?? 'A').toUpperCase() as FreezeVariant;
+  const freezes = PROTO_FREEZES;
 
   // Secondary filters shared by both the pending fetch and the resolved fetch.
   const filterParams = () => {
@@ -79,8 +103,11 @@ export function PromotionsPage() {
     setLoading(true);
     api
       .listPromotions({ status: 'Pending', ...filterParams() })
-      .then((data) => setCandidates(data.candidates || []))
-      .catch(() => setCandidates([]))
+      // PROTOTYPE — fall back to stub candidates when the API is down or empty
+      .then((data) =>
+        setCandidates(data.candidates?.length ? data.candidates : applyStubFilters(PROTO_CANDIDATES, filterParams())),
+      )
+      .catch(() => setCandidates(applyStubFilters(PROTO_CANDIDATES, filterParams())))
       .finally(() => setLoading(false));
   };
 
@@ -239,6 +266,16 @@ export function PromotionsPage() {
         </p>
       </div>
 
+      {/* PROTOTYPE variants C and D — page-level banner of active freezes */}
+      {showsBanner(freezeVariant) && (
+        <FreezeBanner
+          freezes={freezes}
+          candidates={pending}
+          productFilter={productFilter}
+          targetEnvFilter={targetEnvFilter}
+        />
+      )}
+
       {/* Secondary filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <select
@@ -385,8 +422,9 @@ export function PromotionsPage() {
                   </button>
                 )}
               </div>
-              <div className="space-y-2">
-                {displayedPending.map((c) => (
+              {/* PROTOTYPE — variant B splits frozen candidates into their own group */}
+              {(() => {
+                const renderCard = (c: PromotionCandidate) => (
                   <CandidateCard
                     key={c.id}
                     candidate={c}
@@ -397,9 +435,24 @@ export function PromotionsPage() {
                     onFilterByReference={setReferenceFilter}
                     workItemProgress={workItemProgress[c.id]}
                     awaitingCue={view !== 'mine'}
+                    freeze={findFreeze(freezes, c)}
+                    freezeVariant={freezeVariant}
                   />
-                ))}
-              </div>
+                );
+                if (!groupsFrozen(freezeVariant)) {
+                  return <div className="space-y-2">{displayedPending.map(renderCard)}</div>;
+                }
+                const frozen = displayedPending.filter((c) => findFreeze(freezes, c));
+                const open = displayedPending.filter((c) => !findFreeze(freezes, c));
+                return (
+                  <div className="space-y-5">
+                    <div className="space-y-2">{open.map(renderCard)}</div>
+                    <FrozenGroup freezes={freezes} candidates={frozen}>
+                      {frozen.map(renderCard)}
+                    </FrozenGroup>
+                  </div>
+                );
+              })()}
             </div>
           ) : view === 'mine' ? (
             <div
@@ -491,6 +544,8 @@ export function PromotionsPage() {
           )}
         </div>
       )}
+      {/* PROTOTYPE — variant switcher */}
+      <PrototypeSwitcher variants={FREEZE_VARIANTS} current={freezeVariant} />
     </div>
   );
 }
@@ -505,6 +560,8 @@ function CandidateCard({
   workItemProgress,
   awaitingCue,
   compact,
+  freeze,
+  freezeVariant,
 }: {
   candidate: PromotionCandidate;
   urgent?: boolean;
@@ -518,6 +575,10 @@ function CandidateCard({
   /** Compact reference row for the resolved (browse-only) list: drops work-item chips,
      people chips, and signoff progress; keeps service, version/env, status, time, View. */
   compact?: boolean;
+  /** PROTOTYPE — active freeze on this candidate's (product, targetEnv), if any. */
+  freeze?: ActiveFreezeStub;
+  /** PROTOTYPE — which freeze cue variant to render. */
+  freezeVariant?: FreezeVariant;
 }) {
   const navigate = useNavigate();
   const cfg = STATUS_CONFIG[candidate.status] ?? STATUS_CONFIG.Pending;
@@ -529,7 +590,12 @@ function CandidateCard({
       style={{
         borderColor: urgent ? cfg.color + '40' : 'var(--border-color)',
         backgroundColor: 'var(--bg-primary)',
-        borderLeft: candidate.canApprove ? `3px solid var(--warning)` : undefined,
+        borderLeft:
+          freeze && freezeVariant && !groupsFrozen(freezeVariant)
+            ? `3px solid var(--info)`
+            : candidate.canApprove
+              ? `3px solid var(--warning)`
+              : undefined,
       }}
       onClick={() => navigate(`/promotions/${candidate.id}`)}
     >
@@ -543,10 +609,14 @@ function CandidateCard({
         />
       )}
       <div className="flex-1 min-w-0">
+        {/* PROTOTYPE variant C — ribbon across the top of a frozen card */}
+        {freeze && freezeVariant && showsRibbon(freezeVariant) && <FrozenRibbon freeze={freeze} />}
         <div className="flex items-center gap-2 mb-1">
           <h3 className="text-[14px] font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
             {candidate.product} / {candidate.service}
           </h3>
+          {/* PROTOTYPE variant A — inline badge */}
+          {freeze && freezeVariant === 'A' && <FrozenBadge freeze={freeze} />}
           {/* The status badge only carries information once status varies (the resolved list).
              In the all-pending list it's constant noise, so drop it there and surface the
              actionable "Awaiting your approval" cue instead. */}
@@ -587,6 +657,13 @@ function CandidateCard({
             {formatDistanceToNow(new Date(candidate.createdAt), { addSuffix: true })}
           </span>
           {!compact && <WorkItemsBadge candidate={candidate} progress={workItemProgress} />}
+          {/* PROTOTYPE variants B and D — small cue only; the group header carries the reason */}
+          {freeze && freezeVariant && groupsFrozen(freezeVariant) && (
+            <span className="flex items-center gap-1 font-medium" style={{ color: 'var(--info)' }}>
+              <Snowflake size={10} />
+              Frozen
+            </span>
+          )}
         </div>
         {/* Work items — key + optional title, click-to-filter + external link */}
         {!compact && (() => {
